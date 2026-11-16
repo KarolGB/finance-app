@@ -4,5 +4,6 @@ class Settings(BaseSettings):
 
     secret_key: str
     environment: str
+    database_url : str
 
 settings = Settings()
