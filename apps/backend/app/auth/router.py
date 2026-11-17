@@ -18,5 +18,5 @@ def refresh(data : RefreshRequest, db : dbSession) -> AuthResponse:
     return refresh_tokens(data.refresh_token, db)
 
 @router.post("/logout")
-def logout(data : RefreshRequest, db : dbSession) -> dict[str : str]:
+def logout(data : RefreshRequest, db : dbSession) -> dict[str, str]:
     return logout_user(data.refresh_token, db)
