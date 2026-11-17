@@ -1,5 +1,6 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import update
 from datetime import datetime, timedelta,timezone
 import jwt
 from pwdlib import PasswordHash
@@ -8,8 +9,29 @@ from ..models.RefreshToken import RefreshToken
 from .schema import RegisterSchema, AuthResponse, LoginScheme
 from ..core.config import settings
 import hashlib
+import uuid
 
 password_hasher = PasswordHash.recommended()
+
+def verify_refresh_token(token : str, db : Session):
+    try:
+        payload = jwt.decode(token,key=settings.secret_key,algorithms=settings.jwt_algorithm)
+        payload["token"] = token
+        user_id: str = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid Refresh Token")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid or Expired Refresh Token")
+    
+    token_hash = hash_string(token)
+    db_token = db.query(RefreshToken).where(RefreshToken.user_id == user_id).where(RefreshToken.token_hash == token_hash).where(RefreshToken.is_revoked == False).scalar()
+    if not db_token:
+        raise HTTPException(
+            status_code=401, 
+            detail="Refresh Token has been revoked or is invalid"
+        )
+    return payload
+    
 
 def hash_string(str : str):
     return hashlib.sha256(str.encode("utf-8")).hexdigest()
@@ -79,6 +101,27 @@ def login_user(userData: LoginScheme, db : Session):
     )
     new_refresh_token = RefreshToken(
         user_id = user.id,
+        token_hash = hash_string(refresh_token)
+    )
+    db.add(new_refresh_token)
+    db.commit()
+    return AuthResponse(access_token=access_token,refresh_token=refresh_token)
+
+def refresh_tokens(refresh_token : str, db : Session):
+    payload = verify_refresh_token(refresh_token,db)
+    stmt = update(RefreshToken).where(RefreshToken.token_hash == hash_string(payload.get("token"))).values(is_revoked = True)
+    db.execute(stmt)
+    db.commit()
+    access_token = create_token(
+        str(payload.get("sub")),
+        timedelta(minutes=settings.jwt_access_token_expire_minutes)
+    )
+    refresh_token = create_token(
+        str(payload.get("sub")),
+        timedelta(days=settings.jwt_refresh_token_expire_days)
+    )
+    new_refresh_token = RefreshToken(
+        user_id = payload.get("sub"),
         token_hash = hash_string(refresh_token)
     )
     db.add(new_refresh_token)
