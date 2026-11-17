@@ -6,6 +6,10 @@ class RegisterSchema(BaseModel):
     last_name : str
     password : str
     
+class LoginScheme(BaseModel):
+    email : EmailStr
+    password : str
+    
 class AuthResponse(BaseModel):
     access_token : str
     refresh_token : str

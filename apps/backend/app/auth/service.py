@@ -5,7 +5,7 @@ import jwt
 from pwdlib import PasswordHash
 from ..models.User import User
 from ..models.RefreshToken import RefreshToken
-from .schema import RegisterSchema, AuthResponse
+from .schema import RegisterSchema, AuthResponse, LoginScheme
 from ..core.config import settings
 import hashlib
 
@@ -63,4 +63,24 @@ def register_user(userData : RegisterSchema, db : Session) -> AuthResponse:
             status_code=500, 
             detail="Could Not Complete Registration Process. Please Try Again."
         )
+    return AuthResponse(access_token=access_token,refresh_token=refresh_token)
+
+def login_user(userData: LoginScheme, db : Session):
+    user = get_user_by_email(userData.email, db)
+    if not user or not password_hasher.verify(userData.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Username or Password Incorrect")
+    access_token = create_token(
+        str(user.id),
+        timedelta(minutes=settings.jwt_access_token_expire_minutes)
+    )
+    refresh_token = create_token(
+        str(user.id),
+        timedelta(days=settings.jwt_refresh_token_expire_days)
+    )
+    new_refresh_token = RefreshToken(
+        user_id = user.id,
+        token_hash = hash_string(refresh_token)
+    )
+    db.add(new_refresh_token)
+    db.commit()
     return AuthResponse(access_token=access_token,refresh_token=refresh_token)
