@@ -127,3 +127,10 @@ def refresh_tokens(refresh_token : str, db : Session):
     db.add(new_refresh_token)
     db.commit()
     return AuthResponse(access_token=access_token,refresh_token=refresh_token)
+
+def logout_user(refresh_token : str, db : Session):
+    payload = verify_refresh_token(refresh_token,db)
+    stmt = update(RefreshToken).where(RefreshToken.token_hash == hash_string(payload.get("token"))).values(is_revoked = True)
+    db.execute(stmt)
+    db.commit()
+    return {"message":"Successfully logged out"}
